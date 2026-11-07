@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A tap anywhere opens the clock app. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:contentDescription="Open clock">
+
+    <ImageView
+        android:id="@+id/dial"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_launcher_foreground" />
+
+    <!-- dial_text or dial_text_shadow goes here: RemoteViews can't change a text shadow at runtime. -->
+    <FrameLayout
+        android:id="@+id/text_slot"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+</FrameLayout>

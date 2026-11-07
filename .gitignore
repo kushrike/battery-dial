@@ -1,0 +1,12 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+.kotlin/
+.DS_Store
+.claude/
+# Signing keys and their passwords never go in the repo; CI reads them from secrets.
+*.jks
+*.keystore
+keystore.properties

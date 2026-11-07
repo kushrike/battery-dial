@@ -1,0 +1,98 @@
+# Builds and tests the app. Every push to main (or a manual run on main) publishes the APK as a GitHub release.
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    env:
+      VERSION_CODE: ${{ github.run_number }}
+      # Optional stable release key. Without it the APK is signed with a throwaway debug key.
+      KEYSTORE_B64: ${{ secrets.BATTERYDIAL_KEYSTORE_B64 }}
+      BATTERYDIAL_KEYSTORE_PASSWORD: ${{ secrets.BATTERYDIAL_KEYSTORE_PASSWORD }}
+      BATTERYDIAL_KEY_ALIAS: ${{ secrets.BATTERYDIAL_KEY_ALIAS }}
+      BATTERYDIAL_KEY_PASSWORD: ${{ secrets.BATTERYDIAL_KEY_PASSWORD }}
+    outputs:
+      key: ${{ steps.key.outputs.key || 'debug' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      # Also checks gradle-wrapper.jar against Gradle's published checksums.
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Release key
+        id: key
+        if: env.KEYSTORE_B64 != ''
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "BATTERYDIAL_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          echo "key=release" >> "$GITHUB_OUTPUT"
+
+      - name: Test and build
+        run: ./gradlew testDebugUnitTest assembleRelease
+
+      # The app has no network access at all. A new permission has to be added to this list on purpose.
+      - name: Privacy check (permissions, network code)
+        run: |
+          aapt2="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2"
+          "$aapt2" dump permissions app/build/outputs/apk/release/app-release.apk | sed -n "s/^uses-permission: name='\(.*\)'.*/\1/p" | sort > perms.txt
+          printf '%s\n' android.permission.FOREGROUND_SERVICE android.permission.FOREGROUND_SERVICE_SPECIAL_USE \
+            android.permission.POST_NOTIFICATIONS android.permission.RECEIVE_BOOT_COMPLETED \
+            android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS \
+            com.kushrike.batterydial.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION | sort | diff - perms.txt \
+            || { echo "::error::The APK's permissions changed"; exit 1; }
+          if grep -rlE 'java\.net|javax\.net|okhttp|WebView|DownloadManager' app/src/main; then
+            echo "::error::The app must not use the network"; exit 1
+          fi
+
+      - run: mv app/build/outputs/apk/release/app-release.apk "BatteryDial-1.0.$VERSION_CODE.apk"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android
+          path: BatteryDial-*.apk
+          if-no-files-found: error
+
+  release:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: android
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: android
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEY: ${{ needs.android.outputs.key }}
+        run: |
+          v="1.0.${{ github.run_number }}"
+          {
+            echo "Built from ${{ github.sha }}. Android 15 or newer."
+            echo
+            echo "Install \`BatteryDial-$v.apk\` by opening it on your phone, or over USB with \`adb install -r BatteryDial-$v.apk\`."
+            if [ "$KEY" = debug ]; then
+              echo "This build is signed with a throwaway key, so uninstall the previous one first."
+            fi
+          } > notes.md
+          gh release create "v$v" BatteryDial-*.apk --repo "${{ github.repository }}" --target "${{ github.sha }}" \
+            --title "Battery Dial $v" --notes-file notes.md

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.BatteryDial" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/bg</item>
+    </style>
+
+    <!-- Sizes and colors are set per widget in Dial.views; these are the starting values. -->
+    <style name="DialText">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textColor">#FFFFFFFF</item>
+    </style>
+
+    <style name="DialText.Shadow">
+        <item name="android:shadowColor">#CC000000</item>
+        <item name="android:shadowDy">2</item>
+        <item name="android:shadowRadius">8</item>
+    </style>
+</resources>
