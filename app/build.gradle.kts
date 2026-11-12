@@ -19,12 +19,14 @@ android {
 
     signingConfigs {
         // Release key from CI secrets (.github/workflows/build.yml). Without one, the debug key keeps sideloading working.
-        val keystore = providers.environmentVariable("BATTERYDIAL_KEYSTORE").orNull
+        // CI sets unset secrets to "", so empty counts as missing.
+        fun env(name: String) = providers.environmentVariable(name).orNull?.ifEmpty { null }
+        val keystore = env("BATTERYDIAL_KEYSTORE")
         if (keystore != null) create("release") {
             storeFile = file(keystore)
-            storePassword = providers.environmentVariable("BATTERYDIAL_KEYSTORE_PASSWORD").get()
-            keyAlias = providers.environmentVariable("BATTERYDIAL_KEY_ALIAS").orNull ?: "batterydial"
-            keyPassword = providers.environmentVariable("BATTERYDIAL_KEY_PASSWORD").orNull ?: storePassword
+            storePassword = env("BATTERYDIAL_KEYSTORE_PASSWORD")
+            keyAlias = env("BATTERYDIAL_KEY_ALIAS") ?: "batterydial"
+            keyPassword = env("BATTERYDIAL_KEY_PASSWORD") ?: storePassword
         }
     }
 
