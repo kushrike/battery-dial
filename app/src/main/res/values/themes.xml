@@ -4,6 +4,11 @@
         <item name="android:windowBackground">@color/bg</item>
     </style>
 
+    <!-- Invisible and instant: TapActivity only listens for a second tap. -->
+    <style name="Theme.Tap" parent="android:Theme.Translucent.NoTitleBar">
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+
     <!-- Sizes and colors are set per widget in Dial.views; these are the starting values. -->
     <style name="DialText">
         <item name="android:layout_width">wrap_content</item>

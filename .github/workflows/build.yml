@@ -48,7 +48,8 @@ jobs:
       - name: Test and build
         run: ./gradlew testDebugUnitTest assembleRelease
 
-      # The app has no network access at all. A new permission has to be added to this list on purpose.
+      # A new permission has to be added to this list on purpose. Network code may only live in Update.kt,
+      # the GitHub update check.
       - name: Privacy check (permissions, network code)
         run: |
           aapt2="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2"
@@ -56,10 +57,11 @@ jobs:
           printf '%s\n' android.permission.FOREGROUND_SERVICE android.permission.FOREGROUND_SERVICE_SPECIAL_USE \
             android.permission.POST_NOTIFICATIONS android.permission.RECEIVE_BOOT_COMPLETED \
             android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS \
+            android.permission.INTERNET android.permission.REQUEST_INSTALL_PACKAGES \
             com.kushrike.batterydial.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION | sort | diff - perms.txt \
             || { echo "::error::The APK's permissions changed"; exit 1; }
-          if grep -rlE 'java\.net|javax\.net|okhttp|WebView|DownloadManager' app/src/main; then
-            echo "::error::The app must not use the network"; exit 1
+          if grep -rlE 'java\.net|javax\.net|okhttp|WebView|DownloadManager|HttpURLConnection' app/src/main | grep -v '/Update\.kt$'; then
+            echo "::error::Network code outside Update.kt"; exit 1
           fi
 
       - run: mv app/build/outputs/apk/release/app-release.apk "BatteryDial-1.0.$VERSION_CODE.apk"
@@ -90,6 +92,7 @@ jobs:
             echo "Built from ${{ github.sha }}. Android 15 or newer."
             echo
             echo "Install \`BatteryDial-$v.apk\` by opening it on your phone, or over USB with \`adb install -r BatteryDial-$v.apk\`."
+            echo "After that, the app offers each new release itself."
             if [ "$KEY" = debug ]; then
               echo "This build is signed with a throwaway key, so uninstall the previous one first."
             fi

@@ -7,6 +7,9 @@
     <!-- Lets the user turn the status notification on from system settings; never requested at runtime. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- In-app updates (Update.kt): read GitHub's latest release, download its APK and hand it to the installer. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Lets the widget find the clock app to open on tap. -->
     <queries>
@@ -41,6 +44,15 @@
             </intent-filter>
         </activity>
 
+        <!-- Widget taps. Own task, so a running copy of the app doesn't come to the front behind it. -->
+        <activity
+            android:name=".TapActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Tap" />
+
         <receiver
             android:name=".DialWidget"
             android:exported="true"
@@ -61,6 +73,10 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <receiver
+            android:name=".InstallReceiver"
+            android:exported="false" />
 
         <service
             android:name=".BatteryService"

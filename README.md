@@ -17,7 +17,7 @@ An independent reimplementation of the features of [Battery Clock](https://play.
 - Resizable round dial. The ring fills counter-clockwise from 12 o'clock, colored by a low → mid → high gradient, so its tip's color reads as the level.
 - Time (12-hour with small AM/PM, or 24-hour), date (long or short), battery percentage, charging bolt.
 - Optional estimated time until empty, or until full while charging.
-- Tap anywhere to open your clock app.
+- Tap anywhere to open your clock app. Double-tap to refresh the battery reading if it looks stale.
 - Each widget has its own look: long-press it and pick the customize option, or set the default from the app's Designer.
 
 **App**
@@ -26,10 +26,11 @@ An independent reimplementation of the features of [Battery Clock](https://play.
 - History graph over 1, 3 or 7 days, with charging periods shaded.
 - Widget Designer: ring thickness, gradient midpoint, ring spacing and text size; seven colors with transparency; switches for every element; eight preset styles; preview over one of your own photos.
 - Add the widget from the ⋮ menu.
+- Updates itself: when GitHub has a newer release, a banner on the main screen downloads it and Android asks you to confirm the install.
 
 ## Privacy and permissions
 
-The app has **no internet permission**, so it cannot send anything anywhere. Battery history and widget styles stay in app-private storage, and backup is off. CI fails the build if the APK's permissions change or network code appears.
+The only network access is the update check. When you open the app, it asks `api.github.com` for this repo's latest release. When you tap the update banner, it downloads the APK from GitHub. It never sends your battery data, history or settings. Battery history and widget styles stay in app-private storage, and backup is off. CI fails the build if the APK's permissions change or network code appears outside `Update.kt`.
 
 | Permission | Why |
 |---|---|
@@ -37,6 +38,8 @@ The app has **no internet permission**, so it cannot send anything anywhere. Bat
 | `RECEIVE_BOOT_COMPLETED` | Restarts that service after a reboot. |
 | `POST_NOTIFICATIONS` | Declared so the notification can be turned on in system settings. Never requested. |
 | `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | The "Unrestricted battery use" button in Settings, so battery savers don't pause widget updates. |
+| `INTERNET` | The update check and download described above. |
+| `REQUEST_INSTALL_PACKAGES` | Passes a downloaded update to Android's installer. Android asks you before installing, and installs only an APK signed with the same key. |
 | `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` | Added by AndroidX for app-internal broadcasts. |
 
 ## How time left is estimated
@@ -56,7 +59,7 @@ Local release builds are signed with your debug key.
 
 ## Releases
 
-Every push to `main` builds, tests and publishes a GitHub release with the APK. Without a release key, each CI build is signed with a throwaway key, so a new build only installs after uninstalling the old one. For a stable key, add these repository secrets:
+Every push to `main` builds, tests and publishes a GitHub release with the APK. The app checks the latest release and offers to install it. Android only installs an update signed with the same key as the installed app, so CI signs releases with a key stored in these repository secrets:
 
 | Secret | Value |
 |---|---|
@@ -65,12 +68,15 @@ Every push to `main` builds, tests and publishes a GitHub release with the APK. 
 | `BATTERYDIAL_KEY_ALIAS` | Key alias (default `batterydial`) |
 | `BATTERYDIAL_KEY_PASSWORD` | Key password (defaults to the keystore password) |
 
+Without the secrets, each build gets a throwaway key and has to be installed by uninstalling the old one first. Version 1.0.1 was built that way.
+
 ## Code map
 
 | File | What |
 |---|---|
 | `Battery.kt` | Battery readings, history file, time-left estimator |
-| `Dial.kt` | Styles and presets, ring drawing, widget views, widget provider |
+| `Dial.kt` | Styles and presets, ring drawing, widget views, widget provider, tap and double-tap handling |
 | `Monitor.kt` | Foreground service and boot receiver |
 | `MainActivity.kt` | Main screen, history graph, settings |
 | `DesignerActivity.kt` | Widget Designer, color picker, preset list |
+| `Update.kt` | GitHub release check and in-app install, the only network code |

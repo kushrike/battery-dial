@@ -54,7 +54,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,12 +75,17 @@ private fun App(finish: () -> Unit) {
     var settings by rememberSaveable { mutableStateOf(false) }
     var fahrenheit by remember { mutableStateOf(prefs.fahrenheit) }
     val setFahrenheit = { f: Boolean -> fahrenheit = f; prefs.fahrenheit = f }
+    var release by remember { mutableStateOf<Release?>(null) }
+    // Offline or rate-limited: no banner this time.
+    LaunchedEffect(Unit) { release = withContext(Dispatchers.IO) { runCatching { Updates.check(ctx) }.getOrNull() } }
     if (settings) SettingsScreen(prefs, fahrenheit, setFahrenheit) { settings = false }
-    else Home(prefs, fahrenheit, setFahrenheit, openSettings = { settings = true }, finish)
+    else Home(prefs, fahrenheit, setFahrenheit, release, openSettings = { settings = true }, finish)
 }
 
 @Composable
-private fun Home(prefs: Prefs, fahrenheit: Boolean, setFahrenheit: (Boolean) -> Unit, openSettings: () -> Unit, finish: () -> Unit) {
+private fun Home(
+    prefs: Prefs, fahrenheit: Boolean, setFahrenheit: (Boolean) -> Unit, release: Release?, openSettings: () -> Unit, finish: () -> Unit,
+) {
     val ctx = LocalContext.current
     val info = rememberBattery() ?: return
     val tick = rememberMinuteTick()
@@ -110,6 +118,7 @@ private fun Home(prefs: Prefs, fahrenheit: Boolean, setFahrenheit: (Boolean) -> 
         },
     ) { pad ->
         Column(Modifier.padding(pad).padding(horizontal = 12.dp).fillMaxSize()) {
+            if (release != null) UpdateBanner(release)
             Row(Modifier.padding(top = 16.dp), verticalAlignment = Alignment.Bottom) {
                 Stat("Status", info.statusText, Modifier.weight(1f))
                 Box(
@@ -153,9 +162,35 @@ private const val HELP = "Status, temperature, voltage, health and technology co
     "Time Left is an estimate: on battery, how long until empty; on the charger, how long until full. " +
     "It needs the level to move a couple of percent first and gets better as history builds up.\n\n" +
     "Tap the dial to switch between the clock and a big percentage. Tap the temperature to switch °C / °F. " +
-    "Tap the widget on your home screen to open the clock app.\n\n" +
+    "Tap the widget on your home screen to open the clock app. Double-tap it to refresh the battery reading.\n\n" +
     "Battery savers and task killers can stop the widget from updating. If that happens, allow unrestricted " +
     "battery use in Settings."
+
+@Composable
+private fun UpdateBanner(r: Release) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var downloading by remember { mutableStateOf(false) }
+    Box(
+        Modifier.padding(top = 12.dp).fillMaxWidth().clip(RoundedCornerShape(50)).background(Panel)
+            .border(1.dp, Line, RoundedCornerShape(50))
+            .clickable(enabled = !downloading) {
+                downloading = true
+                scope.launch {
+                    runCatching { withContext(Dispatchers.IO) { Updates.install(ctx, r) } }
+                        .onFailure { Toast.makeText(ctx, "Download failed. Try again later.", Toast.LENGTH_LONG).show() }
+                    downloading = false
+                }
+            }
+            .padding(vertical = 10.dp, horizontal = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            if (downloading) "Downloading ${r.version}…" else "Version ${r.version} is available. Tap to update.",
+            color = MaterialTheme.colorScheme.primary, fontSize = 16.sp,
+        )
+    }
+}
 
 private fun temperature(c: Float, f: Boolean) = if (f) "%.0f° F".format(c * 9 / 5 + 32) else "%.1f° C".format(c)
 

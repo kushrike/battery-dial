@@ -1,5 +1,6 @@
 package com.kushrike.batterydial
 
+import android.app.Activity
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -14,13 +15,18 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.SweepGradient
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.AlarmClock
 import android.text.SpannableString
 import android.text.format.DateFormat
 import android.text.style.RelativeSizeSpan
 import android.util.TypedValue
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.widget.RemoteViews
+import android.widget.Toast
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.util.Locale
@@ -192,7 +198,7 @@ object Dial {
             if (interactive) setOnClickPendingIntent(
                 R.id.root,
                 PendingIntent.getActivity(
-                    ctx, 1, clockApp(ctx).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    ctx, 1, Intent(ctx, TapActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
                 ),
             )
@@ -205,7 +211,7 @@ object Dial {
      * The default clock app's main screen. Android has no "open clock" intent, so find whichever app handles
      * alarms and launch it. Falls back to the alarms list, e.g. the chooser when no default clock is set.
      */
-    private fun clockApp(ctx: Context): Intent {
+    fun clockApp(ctx: Context): Intent {
         val alarms = Intent(AlarmClock.ACTION_SHOW_ALARMS)
         val pkg = ctx.packageManager.resolveActivity(alarms, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
         return pkg?.let(ctx.packageManager::getLaunchIntentForPackage) ?: alarms
@@ -237,5 +243,45 @@ class DialWidget : AppWidgetProvider() {
                 mgr.updateAppWidget(id, Dial.views(ctx, prefs.style(id), info, left, (if (size > 0) size else 110).toFloat()))
             }
         }
+    }
+}
+
+/**
+ * Widget taps land on this invisible activity. A widget only reports clicks, so it waits one double-tap interval:
+ * nothing more opens the clock app; a second tap refreshes the battery reading instead. That tap hits this window,
+ * or the widget again (onNewIntent) if it came before the window was up.
+ */
+class TapActivity : Activity() {
+    private val handler = Handler(Looper.getMainLooper())
+    private val openClock = Runnable { startActivity(Dial.clockApp(this)); finish() }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        handler.postDelayed(openClock, ViewConfiguration.getDoubleTapTimeout().toLong())
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        refresh()
+    }
+
+    override fun onTouchEvent(e: MotionEvent): Boolean {
+        if (e.action == MotionEvent.ACTION_DOWN) refresh()
+        return true
+    }
+
+    override fun onDestroy() {
+        handler.removeCallbacks(openClock)
+        super.onDestroy()
+    }
+
+    private fun refresh() {
+        if (isFinishing) return
+        handler.removeCallbacks(openClock)
+        // Stale readings mostly mean the service was stopped. An activity in front is allowed to restart it.
+        BatteryService.start(this)
+        DialWidget.update(this)
+        BatteryInfo.read(this)?.let { Toast.makeText(this, "Battery ${it.level}%, ${it.statusText.lowercase()}", Toast.LENGTH_SHORT).show() }
+        finish()
     }
 }
